@@ -1,0 +1,32 @@
+[package]
+name = "flying-dutchman"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+hex = "0.4"
+near-mpc-sdk = { git = "https://github.com/near/mpc", rev = "d45bd9bd84cbab25393c2ed4e8137fb3bf019c02" }
+near-sdk = "5.29"
+sha2 = "0.10"
+
+# k256 (pulled in via the contract interface) needs the custom rand flag on wasm
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["custom"] }
+
+[dev-dependencies]
+near-sdk = { version = "5.29", features = ["unit-testing"] }
+
+[workspace]
+
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true
