@@ -1,29 +1,14 @@
 //! Example contract calling public methods on the MPC contract
 
-use near_mpc_sdk::foreign_chain::{
-    ForeignChainRequestBuilder, ForeignChainSignatureVerifier, VerifyForeignChainError,
-    VerifyForeignTransactionRequestArgs, VerifyForeignTransactionResponse,
-};
-use near_mpc_sdk::near_mpc_contract_interface::types::{
-    CKDAppPublicKey, CKDRequestArgs, DomainId, Payload, PublicKey,
-};
-use near_mpc_sdk::sign::{SignRequestArgs, SignRequestBuilder};
+use near_mpc_sdk::near_mpc_contract_interface::types::{CKDAppPublicKey, CKDRequestArgs, DomainId};
 use near_sdk::{env, ext_contract, near, AccountId, Gas, NearToken, Promise};
-use sha2::{Digest, Sha256};
 
 /// The MPC contract on testnet (mainnet: `v1.signer`).
 const MPC_CONTRACT: &str = "v1.signer-prod.testnet";
 
 /// Domain ids on the testnet deployment; query `state()` on the MPC contract
 /// to see these domains, their schemes and public keys.
-const ECDSA_SIGN_DOMAIN_ID: u64 = 0;
-const EDDSA_SIGN_DOMAIN_ID: u64 = 1;
 const CKD_DOMAIN_ID: u64 = 2;
-const FOREIGN_TX_DOMAIN_ID: u64 = 3;
-
-/// Public key of the foreign-tx domain (id 3) on testnet, from `state()`.
-/// Foreign-tx responses are signed with the domain's root key.
-const FOREIGN_TX_PUBLIC_KEY: &str = "secp256k1:2KGCoy2pZt7n85QfJnQzCT1eHySuNpquUfNc8ySpRbr15F5kqU7agJYjfo5RkrzNd4tZimDFv2wAZri7RRZ32qj1";
 
 /// The MPC contract requires at least 10 Tgas attached per request.
 const MPC_CALL_GAS: Gas = Gas::from_tgas(30);
@@ -32,8 +17,6 @@ const MPC_CALL_GAS: Gas = Gas::from_tgas(30);
 const CKD_PV_CALL_GAS: Gas = Gas::from_tgas(100);
 /// Every MPC request requires a deposit of at least 1 yoctoNEAR.
 const MPC_CALL_DEPOSIT: NearToken = NearToken::from_yoctonear(1);
-/// Gas for the response-verification callback.
-const CALLBACK_GAS: Gas = Gas::from_tgas(10);
 
 /// The MPC contract methods we call; `#[ext_contract]` generates the typed
 /// `ext_near_mpc` proxy for making these cross-contract calls.
@@ -123,20 +106,18 @@ impl FlyingDutchman {
 
         if caller_account != env::current_account_id() {
             env::panic_str(&format!("{caller_account} not authorized"));
-        }
-        else {
+        } else {
             self.friends.push(friend);
         }
     }
 
     pub fn remove_friend(&mut self, friend: AccountId) {
         let caller_account = env::predecessor_account_id();
-        
+
         if caller_account != env::current_account_id() {
             env::panic_str(&format!("{caller_account} not authorized"));
-        }
-        else {
-            self.friends.retain(|f|friend != *f);
+        } else {
+            self.friends.retain(|f| friend != *f);
         }
     }
 }
