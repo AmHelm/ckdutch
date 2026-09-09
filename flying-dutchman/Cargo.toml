@@ -10,7 +10,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 hex = "0.4"
-near-mpc-sdk = { git = "https://github.com/near/mpc", rev = "d45bd9bd84cbab25393c2ed4e8137fb3bf019c02" }
+near-mpc-sdk = { git = "https://github.com/near/mpc", rev = "d45bd9bd84cbab25393c2ed4e8137fb3bf019c02", features = ["abi"] }
 near-sdk = "5.29"
 sha2 = "0.10"
 

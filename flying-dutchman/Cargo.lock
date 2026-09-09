@@ -1977,6 +1977,7 @@ dependencies = [
  "borsh",
  "derive_more",
  "hex",
+ "schemars 0.8.22",
  "serde",
  "thiserror 2.0.20",
 ]
@@ -1991,6 +1992,7 @@ dependencies = [
  "mpc-primitives",
  "near-mpc-bounded-collections",
  "near-mpc-crypto-types",
+ "schemars 0.8.22",
  "serde",
  "serde_json",
  "serde_repr",
@@ -2011,6 +2013,7 @@ dependencies = [
  "near-account-id",
  "near-mpc-bounded-collections",
  "near-sdk",
+ "schemars 0.8.22",
  "serde",
  "serde_with",
  "sha3 0.10.9",
