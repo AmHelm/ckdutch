@@ -117,6 +117,28 @@ impl FlyingDutchman {
             .with_static_gas(gas)
             .request_app_private_key(request)
     }
+
+    pub fn add_friend(&mut self, friend: AccountId) {
+        let caller_account = env::predecessor_account_id();
+
+        if caller_account != env::current_account_id() {
+            env::panic_str(&format!("{caller_account} not authorized"));
+        }
+        else {
+            self.friends.push(friend);
+        }
+    }
+
+    pub fn remove_friend(&mut self, friend: AccountId) {
+        let caller_account = env::predecessor_account_id();
+        
+        if caller_account != env::current_account_id() {
+            env::panic_str(&format!("{caller_account} not authorized"));
+        }
+        else {
+            self.friends.retain(|f|friend != *f);
+        }
+    }
 }
 
 #[cfg(test)]
