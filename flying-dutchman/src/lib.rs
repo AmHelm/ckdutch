@@ -52,7 +52,10 @@ fn mpc_contract() -> ext_near_mpc::CallNearMpcExt {
 
 #[near(contract_state)]
 #[derive(Default)]
-pub struct FlyingDutchman {}
+pub struct FlyingDutchman {
+    challenge: Option<u64>, // Reveal block height (TODO: newtype)
+    friends: Vec<near_sdk::AccountId>,
+}
 
 #[near]
 impl FlyingDutchman {
