@@ -8,7 +8,7 @@ use near_mpc_sdk::near_mpc_contract_interface::types::{
     CKDAppPublicKey, CKDRequestArgs, DomainId, Payload, PublicKey,
 };
 use near_mpc_sdk::sign::{SignRequestArgs, SignRequestBuilder};
-use near_sdk::{env, ext_contract, near, Gas, NearToken, Promise};
+use near_sdk::{env, ext_contract, near, AccountId, Gas, NearToken, Promise};
 use sha2::{Digest, Sha256};
 
 /// The MPC contract on testnet (mainnet: `v1.signer`).
@@ -54,26 +54,62 @@ fn mpc_contract() -> ext_near_mpc::CallNearMpcExt {
 #[derive(Default)]
 pub struct FlyingDutchman {
     challenge: Option<u64>, // Reveal block height (TODO: newtype)
-    friends: Vec<near_sdk::AccountId>,
+    friends: Vec<AccountId>,
+    challenge_delay_ms: u64,
 }
 
 #[near]
 impl FlyingDutchman {
+    #[init]
+    pub fn init(challenge_delay_ms: u64, friends: Vec<AccountId>) -> Self {
+        FlyingDutchman {
+            challenge: None,
+            friends,
+            challenge_delay_ms,
+        }
+    }
+
+    /// Start the challenge
+    pub fn claim_owner_is_dead(&mut self) {
+        if self.challenge.is_some() {
+            env::panic_str("Challenge already active");
+        } else {
+            self.challenge = Some(env::block_timestamp_ms() + self.challenge_delay_ms);
+        }
+    }
+
+    /// Say that the person is still alive
+    pub fn claim_owner_is_alive(&mut self) {
+        let caller_account = env::predecessor_account_id();
+
+        if caller_account == env::current_account_id() || self.friends.contains(&caller_account) {
+            self.challenge = None;
+        } else {
+            env::panic_str(&format!("{caller_account} not authorized"));
+        }
+    }
+
     /// Requests a private key derived from this contract's account id and
     /// `derivation_path`, returned encrypted to `app_public_key` (e.g.
     /// `"bls12381g1:<base58>"`). Use the `ckd-example-cli` in the mpc repo to
     /// generate the app keypair and decrypt the response.
-    pub fn request_confidential_key(
-        &self,
-        derivation_path: String,
-        app_public_key: CKDAppPublicKey,
-    ) -> Promise {
+    pub fn request_confidential_key(&self, app_public_key: CKDAppPublicKey) -> Promise {
+        let is_owner = env::predecessor_account_id() == env::current_account_id();
+        let is_challenge_expired = match self.challenge.as_ref() {
+            Some(challenge_time) => env::block_timestamp() > *challenge_time,
+            None => false,
+        };
+
+        if !is_owner && !is_challenge_expired {
+            env::panic_str("Unauthorized!!!!!!!!!!!!!");
+        }
+
         let gas = match &app_public_key {
             CKDAppPublicKey::AppPublicKey(_) => MPC_CALL_GAS,
             CKDAppPublicKey::AppPublicKeyPV(_) => CKD_PV_CALL_GAS,
         };
         let request = CKDRequestArgs {
-            derivation_path,
+            derivation_path: "d".to_string(),
             app_public_key,
             domain_id: DomainId(CKD_DOMAIN_ID),
         };
