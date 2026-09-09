@@ -40,9 +40,7 @@ const CALLBACK_GAS: Gas = Gas::from_tgas(10);
 #[ext_contract(ext_near_mpc)]
 #[allow(dead_code)] // only the generated `ext_near_mpc` proxy is used
 trait CallNearMpc {
-    fn sign(&self, request: SignRequestArgs);
     fn request_app_private_key(&self, request: CKDRequestArgs);
-    fn verify_foreign_transaction(&self, request: VerifyForeignTransactionRequestArgs);
 }
 
 /// Proxy to the MPC contract with the standard deposit and gas attached.
@@ -58,33 +56,6 @@ pub struct HelloMpc {}
 
 #[near]
 impl HelloMpc {
-    /// Requests an ECDSA signature
-    pub fn request_signature_ecdsa(&self, message: String) -> Promise {
-        let hash: [u8; 32] = Sha256::digest(message.as_bytes()).into();
-        let request = SignRequestBuilder::new()
-            .with_path("hello-mpc".to_string())
-            .with_payload(Payload::Ecdsa(hash.into()))
-            .with_domain_id(DomainId(ECDSA_SIGN_DOMAIN_ID))
-            .build();
-        mpc_contract().sign(request)
-    }
-
-    /// Requests an EdDSA (Ed25519) signature.
-    pub fn request_signature_eddsa(&self, message: String) -> Promise {
-        let payload = Payload::Eddsa(
-            message
-                .into_bytes()
-                .try_into()
-                .expect("message must be 32-1232 bytes"),
-        );
-        let request = SignRequestBuilder::new()
-            .with_path("hello-mpc".to_string())
-            .with_payload(payload)
-            .with_domain_id(DomainId(EDDSA_SIGN_DOMAIN_ID))
-            .build();
-        mpc_contract().sign(request)
-    }
-
     /// Requests a private key derived from this contract's account id and
     /// `derivation_path`, returned encrypted to `app_public_key` (e.g.
     /// `"bls12381g1:<base58>"`). Use the `ckd-example-cli` in the mpc repo to
@@ -105,87 +76,6 @@ impl HelloMpc {
         };
         mpc_contract().with_static_gas(gas).request_app_private_key(request)
     }
-
-    /// Asks the MPC network to observe a Bitcoin transaction once it has
-    /// `confirmations` confirmations and sign an attestation of the block
-    /// hash it landed in. `tx_id` (and `expected_block_hash`, if given) are
-    /// hex as block explorers display them. The response is checked in
-    /// `on_bitcoin_tx_verified`.
-    pub fn verify_bitcoin_tx(
-        &self,
-        tx_id: String,
-        confirmations: u64,
-        expected_block_hash: Option<String>,
-    ) -> Promise {
-        let (_verifier, request) = bitcoin_request(&tx_id, confirmations, &expected_block_hash);
-        mpc_contract().verify_foreign_transaction(request).then(
-            Self::ext(env::current_account_id())
-                .with_static_gas(CALLBACK_GAS)
-                .on_bitcoin_tx_verified(tx_id, confirmations, expected_block_hash),
-        )
-    }
-
-    /// Verifies the MPC response: the signed payload hash must match our
-    /// request + expectations, and the signature must check out against the
-    /// foreign-tx domain's public key.
-    #[private]
-    pub fn on_bitcoin_tx_verified(
-        &self,
-        tx_id: String,
-        confirmations: u64,
-        expected_block_hash: Option<String>,
-        #[callback_unwrap] response: VerifyForeignTransactionResponse,
-    ) -> VerifyForeignTransactionResponse {
-        let (verifier, _request) = bitcoin_request(&tx_id, confirmations, &expected_block_hash);
-        let public_key: PublicKey = FOREIGN_TX_PUBLIC_KEY.parse().expect("valid public key");
-        if let Err(err) = verifier.verify_signature(&response, &public_key) {
-            env::panic_str(match err {
-                VerifyForeignChainError::FailedToComputeMsgHash => "failed to compute msg hash",
-                VerifyForeignChainError::IncorrectPayloadSigned { .. } => {
-                    "signed payload does not match request and expectations"
-                }
-                VerifyForeignChainError::UnexpectedSignatureScheme => {
-                    "unexpected signature scheme"
-                }
-                VerifyForeignChainError::SignatureVerificationFailed => {
-                    "signature verification failed"
-                }
-            });
-        }
-        env::log_str(&format!("verified: bitcoin tx {tx_id} is on-chain"));
-        response
-    }
-}
-
-/// Builds the foreign-tx request plus a verifier for its response. The
-/// builder binds `expected_payload_hash` so the MPC network can only answer
-/// with the values we expect.
-fn bitcoin_request(
-    tx_id: &str,
-    confirmations: u64,
-    expected_block_hash: &Option<String>,
-) -> (
-    ForeignChainSignatureVerifier,
-    VerifyForeignTransactionRequestArgs,
-) {
-    let builder = ForeignChainRequestBuilder::new_bitcoin()
-        .with_tx_id(decode_hash(tx_id))
-        .with_block_confirmations(confirmations);
-    let builder = match expected_block_hash {
-        Some(block_hash) => builder.with_expected_block_hash(decode_hash(block_hash)),
-        None => builder,
-    };
-    builder
-        .with_domain_id(DomainId(FOREIGN_TX_DOMAIN_ID))
-        .build()
-        .expect("serializing the expected payload cannot fail")
-}
-
-fn decode_hash(hex_str: &str) -> [u8; 32] {
-    hex::decode(hex_str)
-        .expect("must be hex")
-        .try_into()
-        .expect("must be 32 bytes")
 }
 
 #[cfg(test)]
@@ -194,29 +84,7 @@ mod tests {
     use near_sdk::serde_json;
 
     #[test]
-    fn wire_format() {
-        let request = SignRequestBuilder::new()
-            .with_path("hello-mpc".to_string())
-            .with_payload(Payload::Ecdsa([0xab; 32].into()))
-            .with_domain_id(DomainId(ECDSA_SIGN_DOMAIN_ID))
-            .build();
-        println!("sign: {}", serde_json::json!({ "request": request }));
-
-        let request = SignRequestBuilder::new()
-            .with_path("hello-mpc".to_string())
-            .with_payload(Payload::Eddsa(vec![0xab; 32].try_into().unwrap()))
-            .with_domain_id(DomainId(EDDSA_SIGN_DOMAIN_ID))
-            .build();
-        println!("sign eddsa: {}", serde_json::json!({ "request": request }));
-
-        let (_verifier, request) = bitcoin_request(&"cd".repeat(32), 3, &None);
-        println!("foreign_tx: {}", serde_json::json!({ "request": request }));
-
-        let (_verifier, request) =
-            bitcoin_request(&"cd".repeat(32), 3, &Some("ef".repeat(32)));
-        println!(
-            "foreign_tx with expectations: {}",
-            serde_json::json!({ "request": request })
-        );
+    fn placeholder() {
+        assert!(false)
     }
 }

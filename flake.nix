@@ -31,6 +31,7 @@
             "rust-src"
             "rustc"
             "rustfmt"
+            "rust-analyzer"
           ])
           fenix.packages.${system}.targets.wasm32-unknown-unknown.stable.rust-std
         ];
