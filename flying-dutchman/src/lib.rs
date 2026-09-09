@@ -52,10 +52,10 @@ fn mpc_contract() -> ext_near_mpc::CallNearMpcExt {
 
 #[near(contract_state)]
 #[derive(Default)]
-pub struct HelloMpc {}
+pub struct FlyingDutchman {}
 
 #[near]
-impl HelloMpc {
+impl FlyingDutchman {
     /// Requests a private key derived from this contract's account id and
     /// `derivation_path`, returned encrypted to `app_public_key` (e.g.
     /// `"bls12381g1:<base58>"`). Use the `ckd-example-cli` in the mpc repo to
@@ -74,7 +74,9 @@ impl HelloMpc {
             app_public_key,
             domain_id: DomainId(CKD_DOMAIN_ID),
         };
-        mpc_contract().with_static_gas(gas).request_app_private_key(request)
+        mpc_contract()
+            .with_static_gas(gas)
+            .request_app_private_key(request)
     }
 }
 
