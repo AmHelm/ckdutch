@@ -82,9 +82,6 @@ impl FlyingDutchman {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use near_sdk::serde_json;
-
     #[test]
     fn placeholder() {
         assert!(false)
