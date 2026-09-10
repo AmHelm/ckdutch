@@ -10,6 +10,9 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 use zeroize::Zeroizing;
 
+const SELECTED_ACCOUNT_KEY: &str = "ckdutch.selected-account.v1";
+const SIGNER_KEY: &str = "ckdutch.signer.v1";
+
 #[derive(Clone, Copy, PartialEq)]
 enum Page {
     Overview,
@@ -104,10 +107,12 @@ pub fn App() -> impl IntoView {
         .and_then(|w| w.location().search().ok())
         .and_then(|q| web_sys::UrlSearchParams::new_with_str(&q).ok())
         .and_then(|q| q.get("account"))
+        .filter(|account| !account.trim().is_empty())
+        .or_else(load_selected_account)
         .unwrap_or_default();
     let state = AppState {
         page: RwSignal::new(Page::Overview),
-        signer: RwSignal::new(None),
+        signer: RwSignal::new(load_signer()),
         account: RwSignal::new(initial),
         status: RwSignal::new(None),
         status_error: RwSignal::new(String::new()),
@@ -119,6 +124,24 @@ pub fn App() -> impl IntoView {
         now: RwSignal::new(js_sys::Date::now()),
     };
     provide_context(state);
+    Effect::new(move |_| {
+        let account = state.account.get();
+        if let Err(error) = store_selected_account(&account) {
+            state.error.set(true);
+            state
+                .message
+                .set(format!("Could not save this switch: {error:#}"));
+        }
+    });
+    Effect::new(move |_| {
+        state.signer.track();
+        if let Err(error) = store_signer(state.signer.get_untracked().as_ref()) {
+            state.error.set(true);
+            state
+                .message
+                .set(format!("Could not save this account: {error:#}"));
+        }
+    });
     Effect::new(move |_| {
         state.account.track();
         state.status.set(None);
@@ -369,7 +392,7 @@ fn Connect() -> impl IntoView {
     let local_error = RwSignal::new(String::new());
     let connecting = RwSignal::new(false);
     view! {
-        <div class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="connect-title"><div class="modal-heading"><span class="step-icon"><Icon name="wallet"/></span><button class="close-button" aria-label="Close account dialog" disabled=move||state.busy.get()||connecting.get() on:click=move |_|state.connect.set(false)>"×"</button></div><h2 id="connect-title">"Your account, your switch."</h2><p>"Connect with a testnet full-access key. Signing happens in this browser; the key stays in memory for this session."</p>
+        <div class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="connect-title"><div class="modal-heading"><span class="step-icon"><Icon name="wallet"/></span><button class="close-button" aria-label="Close account dialog" disabled=move||state.busy.get()||connecting.get() on:click=move |_|state.connect.set(false)>"×"</button></div><h2 id="connect-title">"Your account, your switch."</h2><p>"Connect with a testnet full-access key. Signing happens in this browser; the key is stored in this browser until you disconnect."</p>
             <Show when=move||!local_error.get().is_empty()><p class="field-error" role="alert">{move||local_error.get()}</p></Show>
             <Show when=move||state.signer.get().is_none() fallback=move||view!{
                 <div class="connected-account"><span class="dot"/><strong>{move||state.signer.get().map(|s|s.account).unwrap_or_default()}</strong><button class="text-button" disabled=move||state.busy.get() on:click=move |_|{state.signer.set(None);generated.set(None);}>"Disconnect"</button></div>
@@ -401,12 +424,66 @@ fn Connect() -> impl IntoView {
                 <button class="button primary full" disabled=move||connecting.get() on:click=move |_|{
                     connecting.set(true);local_error.set(String::new());let result=Signer::import(&account.get_untracked(),&secret.get_untracked());secret.set(String::new());
                     spawn_local(async move {let result=async {let signer=result?;Rpc::default().access_key(&signer).await?;Ok::<_,anyhow::Error>(signer)}.await;
-                        match result{Ok(signer)=>{state.account.set(signer.account.clone());state.signer.set(Some(signer));state.connect.set(false);state.notify("Connected. Your key is kept only for this browser session.");},Err(e)=>local_error.set(format!("{e:#}"))}connecting.set(false);
+                        match result{Ok(signer)=>{state.account.set(signer.account.clone());state.signer.set(Some(signer));state.connect.set(false);state.notify("Connected. This browser will remember your account until you disconnect.");},Err(e)=>local_error.set(format!("{e:#}"))}connecting.set(false);
                     });
                 }>{move||if connecting.get(){"Checking account…"}else{"Connect account"}}<Icon name="arrow"/></button>
-                <p class="hint">"Testnet only. Use a dedicated development key. Refreshing or closing this page disconnects your account."</p>
+                <p class="hint">"Testnet only. Use a dedicated development key. Browser storage can be read by scripts running on this site; Disconnect removes the saved key."</p>
             </Show>
         </section></div>
+    }
+}
+
+fn local_storage() -> Result<web_sys::Storage> {
+    web_sys::window()
+        .context("No browser window")?
+        .local_storage()
+        .map_err(|_| anyhow!("browser storage is unavailable"))?
+        .context("browser storage is disabled")
+}
+
+fn load_selected_account() -> Option<String> {
+    local_storage()
+        .ok()?
+        .get_item(SELECTED_ACCOUNT_KEY)
+        .ok()?
+        .filter(|account| !account.trim().is_empty())
+}
+
+fn store_selected_account(account: &str) -> Result<()> {
+    let storage = local_storage()?;
+    if account.trim().is_empty() {
+        storage
+            .remove_item(SELECTED_ACCOUNT_KEY)
+            .map_err(|_| anyhow!("browser storage rejected the update"))
+    } else {
+        storage
+            .set_item(SELECTED_ACCOUNT_KEY, account)
+            .map_err(|_| anyhow!("browser storage rejected the update"))
+    }
+}
+
+fn load_signer() -> Option<Signer> {
+    let credentials = Zeroizing::new(local_storage().ok()?.get_item(SIGNER_KEY).ok()??);
+    let value: serde_json::Value = serde_json::from_str(&credentials).ok()?;
+    Signer::import(
+        value.get("account_id")?.as_str()?,
+        value.get("private_key")?.as_str()?,
+    )
+    .ok()
+}
+
+fn store_signer(signer: Option<&Signer>) -> Result<()> {
+    let storage = local_storage()?;
+    match signer {
+        Some(signer) => {
+            let credentials = signer.credentials()?;
+            storage
+                .set_item(SIGNER_KEY, &credentials)
+                .map_err(|_| anyhow!("browser storage rejected the private key"))
+        }
+        None => storage
+            .remove_item(SIGNER_KEY)
+            .map_err(|_| anyhow!("browser storage rejected the update")),
     }
 }
 
