@@ -7,6 +7,60 @@ available through NEAR MPC.
 For setup details and examples of every contract interaction, see the
 [standalone guide](GUIDE.md).
 
+## Browser app
+
+The frontend uses TypeScript, React, `near-kit` 0.20.0 and NEAR Connect with
+Meteor on testnet. Its small Rust/WASM module preserves the original capsule
+format and verifies MPC responses. Account keys stay in Meteor; the app asks
+the wallet to approve setup and each contract call.
+
+**Current Meteor limitation (verified September 10, 2026):** wallet connection,
+restoration and disconnection work, but fresh-switch setup is blocked. The
+published NEAR Connect executor rejects global-contract actions. Testing an
+unchanged build of Meteor's updated source reaches its wallet interface, which
+then explicitly refuses attaching a global contract. This app uses the standard
+published connector; it does not ship that test build or bypass the wallet's
+restriction. Live setup, sealing and recovery remain unverified until Meteor
+supports this flow. The setup instructions below describe the intended flow.
+
+Install [Bun](https://bun.sh/) and Rust with the `wasm32-unknown-unknown` target,
+then run:
+
+```console
+cd frontend
+bun install --frozen-lockfile
+bun run build:crypto
+bun run dev
+```
+
+Open the local URL printed by Vite. Create and fund a **dedicated testnet
+account in Meteor**, connect it, and use **Set up a switch**. Setup attaches
+the shared contract and initializes it in one transaction; accounts that
+already have contract code are rejected. The switch account itself is its
+owner. Connecting a parent account does not grant control of a child switch.
+
+To check or build the frontend:
+
+```console
+bun run typecheck
+bun run test
+bun run test:crypto
+bun run build
+bun run preview
+```
+
+`bun run build` regenerates the WASM module, checks TypeScript and creates
+`frontend/dist`. Deploy that directory as a static site over HTTPS. No server
+session, NEP-413 sign-in proof, application-held account key, or automatic
+function-call permission is needed for these wallet actions.
+
+For a manual testnet smoke test, connect Meteor, set up a fresh account,
+seal and download a small capsule, then upload and open it as the owner.
+Check in, manage a trusted friend, and test the challenge/recovery flow with
+a short response window and a second account. Every write requires wallet
+approval. If submission is uncertain, inspect the displayed transaction link
+before retrying.
+
 ## How to build and deploy
 
 ### Prepare
