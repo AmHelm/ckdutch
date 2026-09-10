@@ -69,7 +69,9 @@ const file = (value: string) => ({
 });
 
 beforeEach(() => {
+	vi.restoreAllMocks();
 	vi.resetAllMocks();
+	localStorage.clear();
 	history.replaceState({}, "", "/");
 	mocks.getStatus.mockImplementation(async (account: string) =>
 		status(account),
@@ -79,6 +81,38 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("wallet frontend flows", () => {
+	it("restores the selected switch across remounts and wallet restoration", async () => {
+		localStorage.setItem("ckdutch.selected-account.v1", "saved.testnet");
+		const app = render(<App />);
+		await wallet("owner.testnet");
+		expect(screen.getByRole("textbox", { name: "Switch account" })).toHaveProperty("value", "saved.testnet");
+		fireEvent.change(screen.getByRole("textbox", { name: "Switch account" }), { target: { value: "other.testnet" } });
+		fireEvent.click(screen.getByRole("button", { name: "Look up" }));
+		app.unmount();
+		render(<App />);
+		expect(screen.getByRole("textbox", { name: "Switch account" })).toHaveProperty("value", "other.testnet");
+	});
+
+	it("prefers a nonblank account link over storage and falls back for a blank link", () => {
+		localStorage.setItem("ckdutch.selected-account.v1", "saved.testnet");
+		history.replaceState({}, "", "/?account=linked.testnet");
+		const app = render(<App />);
+		expect(screen.getByRole("textbox", { name: "Switch account" })).toHaveProperty("value", "linked.testnet");
+		app.unmount();
+		history.replaceState({}, "", "/?account=%20");
+		render(<App />);
+		expect(screen.getByRole("textbox", { name: "Switch account" })).toHaveProperty("value", "linked.testnet");
+	});
+
+	it("stays usable when browser storage is unavailable", async () => {
+		vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("disabled"); });
+		vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => { throw new Error("disabled"); });
+		render(<App />);
+		expect(screen.getByRole("status").textContent).toContain("Could not save this switch");
+		await wallet("owner.testnet");
+		expect(screen.getByRole("textbox", { name: "Switch account" })).toHaveProperty("value", "owner.testnet");
+	});
+
 	it("preserves the landing page and offers Meteor with no private-key fields", () => {
 		render(<App />);
 		expect(

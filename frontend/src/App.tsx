@@ -39,12 +39,22 @@ const useApp = () => useContext(Context)!;
 const errorMessage = (error: unknown) =>
 	error instanceof Error ? error.message : String(error);
 
+const SELECTED_ACCOUNT_KEY = "ckdutch.selected-account.v1";
+
+function initialAccount(): string {
+	const query = new URLSearchParams(location.search).get("account");
+	if (query?.trim()) return query;
+	try {
+		return localStorage.getItem(SELECTED_ACCOUNT_KEY) ?? "";
+	} catch {
+		return "";
+	}
+}
+
 export function App() {
 	const [page, setPage] = useState<Page>("Overview");
 	const [wallet, setWallet] = useState<string | null>(null);
-	const [account, setAccount] = useState(
-		() => new URLSearchParams(location.search).get("account") ?? "",
-	);
+	const [account, setAccount] = useState(initialAccount);
 	const [status, setStatus] = useState<chain.SwitchStatus | null>(null);
 	const [statusError, setStatusError] = useState("");
 	const [busy, setBusy] = useState(false);
@@ -60,6 +70,14 @@ export function App() {
 		setMessage(value);
 		setError(failed);
 	}, []);
+	useEffect(() => {
+		try {
+			if (account.trim()) localStorage.setItem(SELECTED_ACCOUNT_KEY, account);
+			else localStorage.removeItem(SELECTED_ACCOUNT_KEY);
+		} catch {
+			notify("Could not save this switch: browser storage is unavailable.", true);
+		}
+	}, [account, notify]);
 	const refresh = useCallback(async () => {
 		const selected = currentAccount.current;
 		const sequence = ++request.current;
