@@ -7,6 +7,60 @@ available through NEAR MPC.
 For setup details and examples of every contract interaction, see the
 [standalone guide](GUIDE.md).
 
+## Browser app
+
+The frontend uses TypeScript, React, `near-kit` 0.20.0 and NEAR Connect with
+Intear or Meteor on testnet. Its small Rust/WASM module preserves the original capsule
+format and verifies MPC responses. Account keys stay in the wallet; the app asks
+the wallet to approve setup and each contract call.
+
+**Wallet support (verified September 10, 2026):** Intear's standard web wallet
+successfully attached the global contract, initialized a dedicated testnet
+switch, and approved MPC requests to seal and reopen a capsule. Recovered bytes
+matched the original public test message. Choose Intear for
+new-switch setup. Meteor connects and restores sessions, but its published
+executor rejects global-contract actions; its wallet interface also explicitly
+refuses attachment when tested with an unchanged build of its newer source.
+This app uses the standard published connectors and does not ship wallet patches.
+
+Install [Bun](https://bun.sh/) and Rust with the `wasm32-unknown-unknown` target,
+then run:
+
+```console
+cd frontend
+bun install --frozen-lockfile
+bun run build:crypto
+bun run dev
+```
+
+Open the local URL printed by Vite. Create and fund a **dedicated testnet
+account in Intear**, connect it, and use **Set up a switch**. Setup attaches
+the shared contract and initializes it in one transaction; accounts that
+already have contract code are rejected. The switch account itself is its
+owner. Connecting a parent account does not grant control of a child switch.
+
+To check or build the frontend:
+
+```console
+bun run typecheck
+bun run test
+bun run test:crypto
+bun run build
+bun run preview
+```
+
+`bun run build` regenerates the WASM module, checks TypeScript and creates
+`frontend/dist`. Deploy that directory as a static site over HTTPS. No server
+session, NEP-413 sign-in proof, application-held account key, or automatic
+function-call permission is needed for these wallet actions.
+
+For a manual testnet smoke test, connect Intear, set up a fresh account,
+seal and download a small capsule, then upload and open it as the owner.
+Check in, manage a trusted friend, and test the challenge/recovery flow with
+a short response window and a second account. Every write requires wallet
+approval. If submission is uncertain, inspect the displayed transaction link
+before retrying.
+
 ## How to build and deploy
 
 ### Prepare
