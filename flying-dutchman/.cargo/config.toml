@@ -1,0 +1,8 @@
+# near-sdk 5.29 gates its host-function bindings (`env::panic_str`, `env::abort`,
+# the hashes) behind `cfg(near)`. Without the flag the contract still compiles
+# and deploys, but every guard rail aborts with an opaque "unreachable opcode"
+# trap instead of its message, and the hashes fall back to pure Rust. This keeps
+# `cargo build --target wasm32-unknown-unknown` correct; `cargo near build` sets
+# the same flag and additionally runs `wasm-opt` and generates the ABI.
+[target.wasm32-unknown-unknown]
+rustflags = ["--cfg", "near"]

@@ -10,13 +10,20 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 hex = "0.4"
-near-mpc-sdk = { git = "https://github.com/near/mpc", rev = "d45bd9bd84cbab25393c2ed4e8137fb3bf019c02", features = ["abi"] }
+near-mpc-sdk = { git = "https://github.com/near/mpc", rev = "d45bd9bd84cbab25393c2ed4e8137fb3bf019c02" }
 near-sdk = "5.29"
 sha2 = "0.10"
 
 # k256 (pulled in via the contract interface) needs the custom rand flag on wasm
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2", features = ["custom"] }
+
+# `cargo near build` generates the ABI as a host build, where near-mpc-sdk's
+# schema support only compiles together with near-sdk's own. Enabling either
+# unconditionally breaks the host build that `cargo test` needs, so ABI builds
+# opt in: `cargo near build non-reproducible-wasm --features abi`.
+[features]
+abi = ["near-mpc-sdk/abi"]
 
 [dev-dependencies]
 near-sdk = { version = "5.29", features = ["unit-testing"] }

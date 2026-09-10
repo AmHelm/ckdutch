@@ -36,15 +36,27 @@ fn mpc_contract() -> ext_near_mpc::CallNearMpcExt {
 #[near(contract_state)]
 #[derive(Default)]
 pub struct FlyingDutchman {
-    challenge: Option<u64>, // Reveal block height (TODO: newtype)
+    challenge: Option<u64>, // Release deadline in milliseconds since Unix epoch.
     friends: Vec<AccountId>,
     challenge_delay_ms: u64,
+}
+
+#[near(serializers = [json])]
+pub struct SwitchStatus {
+    pub owner: AccountId,
+    pub challenge_deadline_ms: Option<u64>,
+    pub challenge_delay_ms: u64,
+    pub friends: Vec<AccountId>,
+    pub now_ms: u64,
+    pub key_is_public: bool,
+    pub version: String,
 }
 
 #[near]
 impl FlyingDutchman {
     #[init]
     pub fn init(challenge_delay_ms: u64, friends: Vec<AccountId>) -> Self {
+        assert!(challenge_delay_ms > 0, "Challenge delay must be positive");
         FlyingDutchman {
             challenge: None,
             friends,
@@ -57,7 +69,11 @@ impl FlyingDutchman {
         if self.challenge.is_some() {
             env::panic_str("Challenge already active");
         } else {
-            self.challenge = Some(env::block_timestamp_ms() + self.challenge_delay_ms);
+            self.challenge = Some(
+                env::block_timestamp_ms()
+                    .checked_add(self.challenge_delay_ms)
+                    .expect("Challenge deadline overflow"),
+            );
         }
     }
 
@@ -73,18 +89,18 @@ impl FlyingDutchman {
     }
 
     /// Requests a private key derived from this contract's account id and
-    /// `derivation_path`, returned encrypted to `app_public_key` (e.g.
+    /// the fixed derivation path `d`, returned encrypted to `app_public_key` (e.g.
     /// `"bls12381g1:<base58>"`). Use the `ckd-example-cli` in the mpc repo to
     /// generate the app keypair and decrypt the response.
     pub fn request_confidential_key(&self, app_public_key: CKDAppPublicKey) -> Promise {
         let is_owner = env::predecessor_account_id() == env::current_account_id();
         let is_challenge_expired = match self.challenge.as_ref() {
-            Some(challenge_time) => env::block_timestamp() > *challenge_time,
+            Some(challenge_time) => env::block_timestamp_ms() >= *challenge_time,
             None => false,
         };
 
         if !is_owner && !is_challenge_expired {
-            env::panic_str("Unauthorized!!!!!!!!!!!!!");
+            env::panic_str("Only the owner may request a key before the challenge expires");
         }
 
         let gas = match &app_public_key {
@@ -99,6 +115,19 @@ impl FlyingDutchman {
         mpc_contract()
             .with_static_gas(gas)
             .request_app_private_key(request)
+    }
+
+    pub fn get_status(&self) -> SwitchStatus {
+        let now_ms = env::block_timestamp_ms();
+        SwitchStatus {
+            owner: env::current_account_id(),
+            challenge_deadline_ms: self.challenge,
+            challenge_delay_ms: self.challenge_delay_ms,
+            friends: self.friends.clone(),
+            now_ms,
+            key_is_public: self.challenge.is_some_and(|deadline| now_ms >= deadline),
+            version: "1".to_string(),
+        }
     }
 
     pub fn add_friend(&mut self, friend: AccountId) {
@@ -124,8 +153,75 @@ impl FlyingDutchman {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use near_sdk::{test_utils::VMContextBuilder, testing_env};
+
+    fn context(caller: &str, time_ms: u64) {
+        testing_env!(VMContextBuilder::new()
+            .current_account_id("owner.testnet".parse().unwrap())
+            .predecessor_account_id(caller.parse().unwrap())
+            .block_timestamp(time_ms * 1_000_000)
+            .account_balance(NearToken::from_near(10))
+            .build());
+    }
+
+    fn public_key() -> CKDAppPublicKey {
+        use near_mpc_sdk::near_mpc_contract_interface::types::Bls12381G1PublicKey;
+        let bytes = hex::decode("97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb").unwrap();
+        CKDAppPublicKey::AppPublicKey(Bls12381G1PublicKey(bytes.try_into().unwrap()))
+    }
+
     #[test]
-    fn placeholder() {
-        assert!(false)
+    fn deadline_and_cancellation() {
+        context("visitor.testnet", 1_800_000_000_000);
+        let mut contract = FlyingDutchman::init(60_000, vec!["friend.testnet".parse().unwrap()]);
+        contract.claim_owner_is_dead();
+        let deadline = contract.get_status().challenge_deadline_ms.unwrap();
+        assert_eq!(deadline, 1_800_000_060_000);
+        context("visitor.testnet", deadline - 1);
+        assert!(!contract.get_status().key_is_public);
+        context("visitor.testnet", deadline);
+        assert!(contract.get_status().key_is_public);
+        context("friend.testnet", deadline - 1);
+        contract.claim_owner_is_alive();
+        assert_eq!(contract.get_status().challenge_deadline_ms, None);
+    }
+
+    #[test]
+    #[should_panic(expected = "Only the owner")]
+    fn public_cannot_request_early_even_at_realistic_timestamps() {
+        context("visitor.testnet", 1_800_000_000_000);
+        let mut contract = FlyingDutchman::init(60_000, vec![]);
+        contract.claim_owner_is_dead();
+        context("visitor.testnet", 1_800_000_000_001);
+        contract.request_confidential_key(public_key()).detach();
+    }
+
+    #[test]
+    fn owner_can_request_without_challenge_and_public_at_deadline() {
+        context("owner.testnet", 1_800_000_000_000);
+        let mut contract = FlyingDutchman::init(60_000, vec![]);
+        contract.request_confidential_key(public_key()).detach();
+        contract.claim_owner_is_dead();
+        context("visitor.testnet", 1_800_000_060_000);
+        contract.request_confidential_key(public_key()).detach();
+    }
+
+    #[test]
+    #[should_panic(expected = "not authorized")]
+    fn stranger_cannot_cancel() {
+        context("visitor.testnet", 1_000);
+        let mut contract = FlyingDutchman::init(60_000, vec![]);
+        contract.claim_owner_is_dead();
+        contract.claim_owner_is_alive();
+    }
+
+    #[test]
+    #[should_panic(expected = "already active")]
+    fn challenge_cannot_be_extended_by_a_stranger() {
+        context("visitor.testnet", 1_000);
+        let mut contract = FlyingDutchman::init(60_000, vec![]);
+        contract.claim_owner_is_dead();
+        contract.claim_owner_is_dead();
     }
 }
