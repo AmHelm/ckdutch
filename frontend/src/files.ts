@@ -6,20 +6,6 @@ export async function readFile(file: File | undefined, limit = MAX_FILE_BYTES) {
 	return new Uint8Array(await file.arrayBuffer());
 }
 
-export function download(name: string, bytes: Uint8Array, mime: string) {
-	const url = URL.createObjectURL(
-		new Blob([new Uint8Array(bytes)], { type: mime }),
-	);
-	const anchor = document.createElement("a");
-	anchor.href = url;
-	anchor.download = name.replace(/[\\/\x00-\x1f\x7f]/g, "_");
-	anchor.hidden = true;
-	document.body.append(anchor);
-	anchor.click();
-	anchor.remove();
-	window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
-}
-
 export function duration(ms: number): string {
 	const s = Math.ceil(Math.max(0, ms) / 1_000);
 	if (s >= 86_400)

@@ -16,7 +16,8 @@ the wallet to approve setup and each contract call.
 
 **Wallet support (verified September 10, 2026):** Intear's standard web wallet
 successfully attached the global contract, initialized a dedicated testnet
-switch, and approved the MPC request used to seal a capsule. Choose Intear for
+switch, and approved MPC requests to seal and reopen a capsule. Recovered bytes
+matched the original public test message. Choose Intear for
 new-switch setup. Meteor connects and restores sessions, but its published
 executor rejects global-contract actions; its wallet interface also explicitly
 refuses attachment when tested with an unchanged build of its newer source.

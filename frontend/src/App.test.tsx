@@ -72,6 +72,8 @@ beforeEach(() => {
 	vi.restoreAllMocks();
 	vi.resetAllMocks();
 	localStorage.clear();
+	URL.createObjectURL = vi.fn(() => "blob:test-capsule");
+	URL.revokeObjectURL = vi.fn();
 	history.replaceState({}, "", "/");
 	mocks.getStatus.mockImplementation(async (account: string) =>
 		status(account),
@@ -223,7 +225,7 @@ describe("wallet frontend flows", () => {
 		fireEvent.click(
 			screen.getByRole("button", { name: "Encrypt & seal capsule" }),
 		);
-		await screen.findByRole("button", { name: "Download capsule" });
+		await screen.findByRole("link", { name: "Download capsule" });
 		expect(mocks.derive).toHaveBeenCalledWith(
 			"owner.testnet",
 			expect.any(Function),
@@ -267,7 +269,7 @@ describe("wallet frontend flows", () => {
 		);
 		expect(plaintext.every((byte) => byte === 0)).toBe(true);
 		expect(
-			screen.queryByRole("button", { name: "Download recovered file" }),
+			screen.queryByRole("link", { name: "Download recovered file" }),
 		).toBeNull();
 	});
 
@@ -293,7 +295,7 @@ describe("wallet frontend flows", () => {
 		await screen.findByText("Capsule authentication failed");
 		expect(free).toHaveBeenCalledOnce();
 		expect(
-			screen.queryByRole("button", { name: "Download recovered file" }),
+			screen.queryByRole("link", { name: "Download recovered file" }),
 		).toBeNull();
 	});
 });

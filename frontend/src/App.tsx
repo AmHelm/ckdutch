@@ -10,8 +10,9 @@ import {
 } from "react";
 import * as chain from "./chain";
 import { Icon } from "./Icon";
-import { download, duration, readFile } from "./files";
+import { duration, readFile } from "./files";
 import { loadCrypto } from "./crypto";
+import { DownloadLink } from "./DownloadLink";
 
 type Page =
 	| "Overview"
@@ -713,22 +714,10 @@ function Seal() {
 								Keep the downloaded .ckdutch.json file somewhere others can find
 								it. This app doesn’t upload or store it.
 							</p>
-							<button
-								className="button primary"
-								onClick={() => {
-									download(
-										`${capsule.filename}.ckdutch.json`,
-										new TextEncoder().encode(JSON.stringify(capsule, null, 2)),
-										"application/json",
-									);
-									s.notify(
-										"Capsule download started. Share this encrypted file publicly or with your recipients.",
-									);
-								}}
-							>
+							<DownloadLink name={`${capsule.filename}.ckdutch.json`} content={JSON.stringify(capsule, null, 2)} mime="application/json">
 								<Icon name="download" />
 								Download capsule
-							</button>
+							</DownloadLink>
 						</div>
 					)}
 				</aside>
@@ -871,19 +860,10 @@ function Open() {
 					{plaintext && capsule && (
 						<div className="recovered">
 							<h3>Your capsule is open.</h3>
-							<button
-								className="button primary"
-								onClick={() =>
-									download(
-										capsule.filename,
-										plaintext,
-										"application/octet-stream",
-									)
-								}
-							>
+							<DownloadLink name={capsule.filename} content={plaintext} mime="application/octet-stream">
 								<Icon name="download" />
 								Download recovered file
-							</button>
+							</DownloadLink>
 							<button className="text-button" onClick={clear}>
 								Clear recovered contents
 							</button>
