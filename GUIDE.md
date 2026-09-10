@@ -120,23 +120,14 @@ near contract call-function as-transaction \
 ### Request and decrypt the confidential key
 
 The owner may request the key at any time. Other callers must first open a
-challenge and wait for it to expire. The contract uses CKD domain `2` and the
-fixed derivation path `d`.
-
-First, query the MPC contract state and copy the BLS public key for
-`domain_id: 2` from `Running.keyset.domains`:
-
-```console
-near contract call-function as-read-only \
-  v1.signer-prod.testnet state json-args '{}' \
-  network-config testnet now
-```
+challenge and wait for it to expire. The contract uses CKD domain `2`, the
+fixed derivation path `d`, and the current testnet CKD public key shown below.
 
 In terminal 1, start the CKD helper. The signer ID must be the contract account,
 because that account makes the cross-contract MPC request:
 
 ```console
-export MPC_CKD_PUBLIC_KEY='bls12381g2:REPLACE_WITH_DOMAIN_2_PUBLIC_KEY'
+export MPC_CKD_PUBLIC_KEY='bls12381g2:xeYho48G2Sr9oJz4gw9sLGZGspeeKpHZvMDAwWvoNTRnVMFJH96GxX98TT2MRhTtsot1wcGR1Ti2Xh8PCsbYJ2enbLNdJXDvTYSK8aTE3nJ5NZXU7Kt1F6mFtReWs5pR4kj'
 
 ckd-example-cli \
   --mpc-ckd-public-key "$MPC_CKD_PUBLIC_KEY" \
@@ -144,6 +135,10 @@ ckd-example-cli \
   --derivation-path d \
   --signer-account-id "$MY_USER_ACCOUNT"
 ```
+
+This public key belongs to the current testnet MPC keyset. If the helper stops
+verifying responses after an MPC resharing, update it from domain `2` in
+`Running.keyset.domains` returned by `v1.signer-prod.testnet`'s `state` method.
 
 The helper prints parameters containing a newly generated `AppPublicKey` and
 then waits for a response. Keep it running and copy only the value of
