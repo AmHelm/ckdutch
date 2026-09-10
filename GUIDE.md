@@ -27,13 +27,8 @@ export GLOBAL_CONTRACT_ACCOUNT=flying-dman.testnet
 export MY_USER_ACCOUNT=dont-kill-me-plz.testnet
 export FRIEND_ACCOUNT=trusted-friend.testnet
 export CLAIMANT_ACCOUNT=concerned-friend.testnet
-
-# Demo value: ten seconds.
 export TIMEOUT_MS=10000
 ```
-
-`MY_USER_ACCOUNT` is both the deployed contract account and its owner. Use a
-longer timeout for anything beyond a demo.
 
 ## Build and deploy
 
