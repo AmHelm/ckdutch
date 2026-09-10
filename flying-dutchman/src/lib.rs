@@ -95,7 +95,7 @@ impl FlyingDutchman {
     pub fn request_confidential_key(&self, app_public_key: CKDAppPublicKey) -> Promise {
         let is_owner = env::predecessor_account_id() == env::current_account_id();
         let is_challenge_expired = match self.challenge.as_ref() {
-            Some(challenge_time) => env::block_timestamp_ms() >= *challenge_time,
+            Some(challenge_time) => env::block_timestamp_ms() > *challenge_time,
             None => false,
         };
 
