@@ -13,7 +13,10 @@ export function download(name: string, bytes: Uint8Array, mime: string) {
 	const anchor = document.createElement("a");
 	anchor.href = url;
 	anchor.download = name.replace(/[\\/\x00-\x1f\x7f]/g, "_");
+	anchor.hidden = true;
+	document.body.append(anchor);
 	anchor.click();
+	anchor.remove();
 	window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 

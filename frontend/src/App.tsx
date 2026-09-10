@@ -985,8 +985,7 @@ function Setup() {
 						onChange={(e) => setGlobal(e.target.value)}
 					/>
 					<p className="hint">
-						Meteor currently blocks attaching a shared contract. Creating a new
-						switch requires wallet support for this action.
+						Attach the shared contract to your dedicated switch account.
 					</p>
 					<label htmlFor="response-window">Response window</label>
 					<select
@@ -1046,8 +1045,8 @@ function Setup() {
 						<span className="eyebrow">START WITH AN ACCOUNT</span>
 						<h3>A home for your switch.</h3>
 						<p>
-							Create and fund a dedicated testnet account in Meteor, then
-							connect it here. Your switch belongs to that account, and Meteor
+							Create and fund a dedicated testnet account in Intear, then
+							connect it here. Your switch belongs to that account, and Intear
 							will ask you to approve setup and each action.
 						</p>
 						<button
@@ -1111,14 +1110,14 @@ function Connect({ close }: { close: () => void }) {
 		dialog.current?.focus();
 		return () => previous?.focus();
 	}, []);
-	const connect = async () => {
+	const connect = async (walletId: chain.WalletId) => {
 		setConnecting(true);
 		setError("");
 		try {
-			await chain.connect();
+			await chain.connect(walletId);
 			close();
 			s.notify(
-				"Connected through Meteor. Approve each transaction in your wallet.",
+				"Connected. Approve each transaction in your wallet.",
 			);
 		} catch (e) {
 			setError(errorMessage(e));
@@ -1186,7 +1185,7 @@ function Connect({ close }: { close: () => void }) {
 				</div>
 				<h2 id="connect-title">Your account, your switch.</h2>
 				<p>
-					Connect your Meteor wallet on NEAR Testnet. Your wallet holds your
+					Connect your wallet on NEAR Testnet. Your wallet holds your
 					account keys and asks you to approve each transaction.
 				</p>
 				{error && (
@@ -1210,18 +1209,30 @@ function Connect({ close }: { close: () => void }) {
 				<button
 					className="button primary full"
 					disabled={connecting}
-					onClick={() => void connect()}
+					onClick={() => void connect("intear-wallet")}
 				>
 					{connecting
-						? "Waiting for Meteor…"
+						? "Waiting for wallet…"
 						: s.wallet
-							? "Choose account in Meteor"
-							: "Connect Meteor"}
+							? "Choose account in Intear"
+							: "Connect Intear"}
+					<Icon name="arrow" />
+				</button>
+				<button
+					className="button secondary full"
+					disabled={connecting}
+					onClick={() => void connect("meteor-wallet")}
+				>
+					Connect Meteor
 					<Icon name="arrow" />
 				</button>
 				<p className="hint">
+					Intear supports creating a switch. Meteor currently blocks attaching
+					the shared contract during setup.
+				</p>
+				<p className="hint">
 					Use a dedicated, funded testnet account for your switch. To change
-					accounts, choose it in Meteor and reconnect here.
+					accounts, choose it in your wallet and reconnect here.
 				</p>
 			</section>
 		</div>

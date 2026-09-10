@@ -8,6 +8,8 @@ const RPC_URL = 'https://rpc.testnet.fastnear.com';
 const MPC_CONTRACT = 'v1.signer-prod.testnet';
 const DOMAIN_ID = 2;
 type HashCallback = (hash: string) => void;
+export type WalletId = 'intear-wallet' | 'meteor-wallet';
+const supportedWallets = new Set<string>(['intear-wallet', 'meteor-wallet']);
 
 export interface SwitchStatus {
   owner: string;
@@ -69,7 +71,7 @@ function publish(account: string | null) {
 }
 
 function selected(accounts: Array<{ accountId: string }>): string {
-  if (accounts.length !== 1) throw new Error('Select one testnet account in Meteor, then reconnect');
+  if (accounts.length !== 1) throw new Error('Select one testnet account in your wallet, then reconnect');
   return accountId(accounts[0]!.accountId);
 }
 
@@ -84,7 +86,7 @@ export function startWallet(): Promise<void> {
   connector = new NearConnector({ network: 'testnet', autoConnect: false, providers: { testnet: [RPC_URL] } });
   connector.on('wallet:signIn', event => {
     walletRevision++;
-    try { publish(event.success && event.wallet.manifest.id === 'meteor-wallet' ? selected(event.accounts) : null); }
+    try { publish(event.success && supportedWallets.has(event.wallet.manifest.id) ? selected(event.accounts) : null); }
     catch { publish(null); }
   });
   connector.on('wallet:signOut', () => { walletRevision++; publish(null); });
@@ -96,7 +98,7 @@ export function startWallet(): Promise<void> {
       async signAndSendTransaction(params: Parameters<typeof adapter.signAndSendTransaction>[0]) {
         const account = await connectedAccount();
         if (!submission || account !== submission.account || params.signerId !== account) {
-          throw new Error('The selected Meteor account changed. Review your account and try again');
+          throw new Error('The selected wallet account changed. Review your account and try again');
         }
         const result = await adapter.signAndSendTransaction(params);
         // Keep the submitted hash even when the SDK's finality lookup fails.
@@ -110,15 +112,17 @@ export function startWallet(): Promise<void> {
   });
   const revision = walletRevision;
   started = connector.getConnectedWallet().then(({ wallet, accounts }) => {
-    if (revision === walletRevision) publish(wallet.manifest.id === 'meteor-wallet' ? selected(accounts) : null);
+    if (revision === walletRevision) publish(supportedWallets.has(wallet.manifest.id) ? selected(accounts) : null);
   }).catch(() => { if (revision === walletRevision) publish(null); });
   return started;
 }
 
-export async function connect(): Promise<void> {
+export async function connect(walletId: WalletId): Promise<void> {
+  if (submission) throw new Error('Wait for the current transaction before changing wallets');
+  if (!supportedWallets.has(walletId)) throw new Error('Choose Intear or Meteor to continue');
   await startWallet();
   walletRevision++;
-  const wallet = await connector!.connect({ walletId: 'meteor-wallet' });
+  const wallet = await connector!.connect({ walletId });
   publish(selected(await wallet.getAccounts()));
 }
 
@@ -132,13 +136,13 @@ export async function disconnect(): Promise<void> {
 
 async function connectedAccount(): Promise<string> {
   await startWallet();
-  if (!selectedAccount) throw new Error('Connect a testnet account with Meteor first');
+  if (!selectedAccount) throw new Error('Connect a testnet wallet account first');
   const { wallet, accounts } = await connector!.getConnectedWallet();
-  if (wallet.manifest.id !== 'meteor-wallet') throw new Error('Connect with Meteor to continue');
+  if (!supportedWallets.has(wallet.manifest.id)) throw new Error('Connect with Intear or Meteor to continue');
   const actual = selected(accounts);
   if (actual !== selectedAccount) {
     publish(actual);
-    throw new Error('The selected Meteor account changed. Review your account and try again');
+    throw new Error('The selected wallet account changed. Review your account and try again');
   }
   return actual;
 }
@@ -179,7 +183,7 @@ async function submit(account: string, build: (near: Near) => TransactionBuilder
   try {
     const result = await build(writer!).send({ waitUntil: 'FINAL' });
     if (result.transaction.signer_id !== account) {
-      throw new Error('Meteor submitted this transaction from a different account. Check the transaction before continuing');
+      throw new Error('The wallet submitted this transaction from a different account. Check the transaction before continuing');
     }
     if (typeof result.status !== 'object' || !('SuccessValue' in result.status)) {
       throw new Error('The transaction did not complete successfully');
@@ -197,9 +201,9 @@ export async function setupSwitch(global: string, delayMs: number, friends: stri
   if (millis(delayMs) === 0) throw new Error('Choose a positive response window');
   const trusted = friends.map(accountId);
   const account = await connectedAccount();
-  if (account !== accountId(expectedAccount)) throw new Error('The selected Meteor account changed. Review setup for this account before continuing');
+  if (account !== accountId(expectedAccount)) throw new Error('The selected wallet account changed. Review setup for this account before continuing');
   const state = await reader.getAccount(account, { finality: 'final' });
-  if (state.hasContract) throw new Error('This account already has a contract. Use a fresh dedicated account in Meteor');
+  if (state.hasContract) throw new Error('This account already has a contract. Use a fresh dedicated account in your wallet');
   await submit(account, near => near.transaction(account).deployFromPublished({ accountId: publisher })
     .functionCall(account, 'init', { challenge_delay_ms: delayMs, friends: trusted }, { gas: '150 Tgas' }), onHash);
   await getStatus(account);

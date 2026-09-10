@@ -46,8 +46,10 @@ const status = {
   challenge_deadline_ms: null, challenge_delay_ms: 60_000, now_ms: 1000, key_is_public: false,
 };
 
-function wallet(account = 'alice.testnet') {
-  return { wallet: { manifest: { id: 'meteor-wallet' } }, accounts: [{ accountId: account }] };
+const walletIds = ['intear-wallet', 'meteor-wallet'] as const;
+
+function wallet(account = 'alice.testnet', id: string = 'meteor-wallet') {
+  return { wallet: { manifest: { id } }, accounts: [{ accountId: account }] };
 }
 
 function outcome(account = 'alice.testnet') {
@@ -66,7 +68,8 @@ beforeEach(() => {
 });
 
 describe('wallet and contract boundaries', () => {
-  it('restores only after startup and delivers the restored account to existing subscribers', async () => {
+  it.each(walletIds)('restores %s only after startup and delivers the account to subscribers', async id => {
+    mocks.getConnectedWallet.mockResolvedValue(wallet('alice.testnet', id));
     const chain = await import('./chain');
     const listener = vi.fn();
     const unsubscribe = chain.subscribeWallet(listener);
@@ -85,12 +88,70 @@ describe('wallet and contract boundaries', () => {
     }
   });
 
-  it('connects Meteor without requesting an application access key or message signature', async () => {
+  it.each(walletIds)('connects %s without requesting an application key or message signature', async id => {
     const chain = await import('./chain');
     mocks.connect.mockResolvedValue({ getAccounts: async () => [{ accountId: 'alice.testnet' }] });
-    await chain.connect();
-    expect(mocks.connect).toHaveBeenCalledWith({ walletId: 'meteor-wallet' });
+    await chain.connect(id);
+    expect(mocks.connect).toHaveBeenCalledWith({ walletId: id });
     expect(mocks.sign).not.toHaveBeenCalled();
+  });
+
+  it.each(walletIds)('accepts %s sign-in events and clears unsupported wallets', async id => {
+    const chain = await import('./chain');
+    const listener = vi.fn();
+    chain.subscribeWallet(listener);
+    await chain.startWallet();
+    const signIn = mocks.on.mock.calls.find(([event]) => event === 'wallet:signIn')![1];
+    signIn({ ...wallet('bob.testnet', id), success: true });
+    expect(listener).toHaveBeenLastCalledWith('bob.testnet');
+    signIn({ ...wallet('bob.testnet', 'unsupported-wallet'), success: true });
+    expect(listener).toHaveBeenLastCalledWith(null);
+  });
+
+  it('does not restore unsupported wallets or request them to sign', async () => {
+    mocks.getConnectedWallet.mockResolvedValue(wallet('alice.testnet', 'unsupported-wallet'));
+    const chain = await import('./chain');
+    const listener = vi.fn();
+    chain.subscribeWallet(listener);
+    await chain.startWallet();
+    expect(listener).toHaveBeenLastCalledWith(null);
+    await expect(chain.callSwitch('alice.testnet', 'claim_owner_is_alive', {})).rejects.toThrow('Connect a testnet wallet account');
+    expect(mocks.sign).not.toHaveBeenCalled();
+    await expect(chain.connect('unsupported-wallet' as never)).rejects.toThrow('Choose Intear or Meteor');
+    expect(mocks.connect).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unsupported active wallet after a supported session was restored', async () => {
+    const chain = await import('./chain');
+    await chain.startWallet();
+    mocks.getConnectedWallet.mockResolvedValue(wallet('alice.testnet', 'unsupported-wallet'));
+    await expect(chain.callSwitch('alice.testnet', 'claim_owner_is_alive', {})).rejects.toThrow('Connect with Intear or Meteor');
+    expect(mocks.sign).not.toHaveBeenCalled();
+  });
+
+  it.each(walletIds)('rejects multiple selected accounts from %s', async id => {
+    const restored = wallet('alice.testnet', id);
+    restored.accounts.push({ accountId: 'bob.testnet' });
+    mocks.getConnectedWallet.mockResolvedValue(restored);
+    const chain = await import('./chain');
+    const listener = vi.fn();
+    chain.subscribeWallet(listener);
+    await chain.startWallet();
+    expect(listener).toHaveBeenLastCalledWith(null);
+    expect(mocks.sign).not.toHaveBeenCalled();
+  });
+
+  it('refuses changing wallets while a transaction is awaiting finality', async () => {
+    const chain = await import('./chain');
+    let finish!: (value: ReturnType<typeof outcome>) => void;
+    mocks.settle.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const pending = chain.callSwitch('alice.testnet', 'claim_owner_is_alive', {});
+    await vi.waitFor(() => expect(mocks.settle).toHaveBeenCalledOnce());
+    await expect(chain.connect('intear-wallet')).rejects.toThrow('Wait for the current transaction');
+    expect(mocks.connect).not.toHaveBeenCalled();
+    finish(outcome());
+    await pending;
+    expect(mocks.sign).toHaveBeenCalledOnce();
   });
 
   it('rejects malformed or inconsistent public-release status', async () => {
@@ -145,7 +206,7 @@ describe('wallet and contract boundaries', () => {
     expect(mocks.sign).not.toHaveBeenCalled();
   });
 
-  it('rechecks Meteor account after preflight and aborts if it changed', async () => {
+  it('rechecks the wallet account after preflight and aborts if it changed', async () => {
     const chain = await import('./chain');
     await chain.startWallet();
     mocks.getConnectedWallet.mockResolvedValueOnce(wallet()).mockResolvedValue(wallet('bob.testnet'));

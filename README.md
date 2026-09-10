@@ -10,18 +10,17 @@ For setup details and examples of every contract interaction, see the
 ## Browser app
 
 The frontend uses TypeScript, React, `near-kit` 0.20.0 and NEAR Connect with
-Meteor on testnet. Its small Rust/WASM module preserves the original capsule
-format and verifies MPC responses. Account keys stay in Meteor; the app asks
+Intear or Meteor on testnet. Its small Rust/WASM module preserves the original capsule
+format and verifies MPC responses. Account keys stay in the wallet; the app asks
 the wallet to approve setup and each contract call.
 
-**Current Meteor limitation (verified September 10, 2026):** wallet connection,
-restoration and disconnection work, but fresh-switch setup is blocked. The
-published NEAR Connect executor rejects global-contract actions. Testing an
-unchanged build of Meteor's updated source reaches its wallet interface, which
-then explicitly refuses attaching a global contract. This app uses the standard
-published connector; it does not ship that test build or bypass the wallet's
-restriction. Live setup, sealing and recovery remain unverified until Meteor
-supports this flow. The setup instructions below describe the intended flow.
+**Wallet support (verified September 10, 2026):** Intear's standard web wallet
+successfully attached the global contract, initialized a dedicated testnet
+switch, and approved the MPC request used to seal a capsule. Choose Intear for
+new-switch setup. Meteor connects and restores sessions, but its published
+executor rejects global-contract actions; its wallet interface also explicitly
+refuses attachment when tested with an unchanged build of its newer source.
+This app uses the standard published connectors and does not ship wallet patches.
 
 Install [Bun](https://bun.sh/) and Rust with the `wasm32-unknown-unknown` target,
 then run:
@@ -34,7 +33,7 @@ bun run dev
 ```
 
 Open the local URL printed by Vite. Create and fund a **dedicated testnet
-account in Meteor**, connect it, and use **Set up a switch**. Setup attaches
+account in Intear**, connect it, and use **Set up a switch**. Setup attaches
 the shared contract and initializes it in one transaction; accounts that
 already have contract code are rejected. The switch account itself is its
 owner. Connecting a parent account does not grant control of a child switch.
@@ -54,7 +53,7 @@ bun run preview
 session, NEP-413 sign-in proof, application-held account key, or automatic
 function-call permission is needed for these wallet actions.
 
-For a manual testnet smoke test, connect Meteor, set up a fresh account,
+For a manual testnet smoke test, connect Intear, set up a fresh account,
 seal and download a small capsule, then upload and open it as the owner.
 Check in, manage a trusted friend, and test the challenge/recovery flow with
 a short response window and a second account. Every write requires wallet

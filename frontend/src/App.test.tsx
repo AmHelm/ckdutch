@@ -120,8 +120,16 @@ describe("wallet frontend flows", () => {
 		).toBeTruthy();
 		fireEvent.click(screen.getByRole("button", { name: "Connect account" }));
 		expect(screen.getByRole("button", { name: "Connect Meteor" })).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Connect Intear" })).toBeTruthy();
 		expect(document.querySelector('input[type="password"]')).toBeNull();
 		expect(screen.queryByText("Download private key backup")).toBeNull();
+	});
+
+	it("connects through Intear when selected", async () => {
+		render(<App />);
+		fireEvent.click(screen.getByRole("button", { name: "Connect account" }));
+		fireEvent.click(screen.getByRole("button", { name: "Connect Intear" }));
+		await waitFor(() => expect(mocks.connect).toHaveBeenCalledWith("intear-wallet"));
 	});
 
 	it("keeps a cancelled wallet connection in the dialog with its error", async () => {
