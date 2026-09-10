@@ -89,6 +89,7 @@
             near-cli
             ckd-example-cli
             pkgs.openssl
+            pkgs.trunk
           ];
         };
       });
