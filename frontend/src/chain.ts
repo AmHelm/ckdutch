@@ -70,7 +70,9 @@ function publish(account: string | null) {
   for (const listener of listeners) listener(account);
 }
 
-function selected(accounts: Array<{ accountId: string }>): string {
+function selected(accounts: Array<{ accountId: string }>, preferred?: string | null): string {
+  // Meteor lists every connected account, while sign-in identifies the selected one.
+  if (preferred && accounts.some(account => account.accountId === preferred)) return accountId(preferred);
   if (accounts.length !== 1) throw new Error('Select one testnet account in your wallet, then reconnect');
   return accountId(accounts[0]!.accountId);
 }
@@ -122,8 +124,10 @@ export async function connect(walletId: WalletId): Promise<void> {
   if (!supportedWallets.has(walletId)) throw new Error('Choose Intear or Meteor to continue');
   await startWallet();
   walletRevision++;
+  // A new connection must establish its own selection through sign-in or a single account.
+  publish(null);
   const wallet = await connector!.connect({ walletId });
-  publish(selected(await wallet.getAccounts()));
+  publish(selected(await wallet.getAccounts(), selectedAccount));
 }
 
 export async function disconnect(): Promise<void> {
@@ -139,7 +143,7 @@ async function connectedAccount(): Promise<string> {
   if (!selectedAccount) throw new Error('Connect a testnet wallet account first');
   const { wallet, accounts } = await connector!.getConnectedWallet();
   if (!supportedWallets.has(wallet.manifest.id)) throw new Error('Connect with Intear or Meteor to continue');
-  const actual = selected(accounts);
+  const actual = selected(accounts, selectedAccount);
   if (actual !== selectedAccount) {
     publish(actual);
     throw new Error('The selected wallet account changed. Review your account and try again');

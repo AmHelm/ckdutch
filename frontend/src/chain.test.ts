@@ -141,6 +141,60 @@ describe('wallet and contract boundaries', () => {
     expect(mocks.sign).not.toHaveBeenCalled();
   });
 
+  it('retains the sign-in account when Meteor lists other connected accounts', async () => {
+    const chain = await import('./chain');
+    const listener = vi.fn();
+    chain.subscribeWallet(listener);
+    const accounts = [{ accountId: 'alice.testnet' }, { accountId: 'bob.testnet' }];
+    mocks.connect.mockImplementation(async () => {
+      const signIn = mocks.on.mock.calls.find(([event]) => event === 'wallet:signIn')![1];
+      signIn({ ...wallet('bob.testnet'), success: true });
+      mocks.getConnectedWallet.mockResolvedValue({ ...wallet('bob.testnet'), accounts });
+      return { getAccounts: async () => accounts };
+    });
+    await chain.connect('meteor-wallet');
+    expect(listener).toHaveBeenLastCalledWith('bob.testnet');
+    mocks.sign.mockResolvedValue(outcome('bob.testnet'));
+    mocks.view.mockResolvedValue({ ...status, owner: 'bob.testnet' });
+    await chain.callSwitch('bob.testnet', 'claim_owner_is_alive', {});
+    expect(mocks.sign).toHaveBeenCalledWith({ signerId: 'bob.testnet' });
+  });
+
+  it('does not reuse a previous selection when a new connection has no selected-account event', async () => {
+    const chain = await import('./chain');
+    const listener = vi.fn();
+    chain.subscribeWallet(listener);
+    await chain.startWallet();
+    mocks.connect.mockResolvedValue({ getAccounts: async () => [
+      { accountId: 'alice.testnet' }, { accountId: 'bob.testnet' },
+    ] });
+    await expect(chain.connect('meteor-wallet')).rejects.toThrow('Select one testnet account');
+    expect(listener).toHaveBeenLastCalledWith(null);
+    expect(mocks.sign).not.toHaveBeenCalled();
+  });
+
+  it('refuses to choose another account when the selected account disappears from a multi-account list', async () => {
+    const chain = await import('./chain');
+    await chain.startWallet();
+    const signIn = mocks.on.mock.calls.find(([event]) => event === 'wallet:signIn')![1];
+    signIn({ ...wallet('bob.testnet'), success: true });
+    mocks.getConnectedWallet.mockResolvedValue({ ...wallet(), accounts: [
+      { accountId: 'alice.testnet' }, { accountId: 'charlie.testnet' },
+    ] });
+    await expect(chain.callSwitch('bob.testnet', 'claim_owner_is_alive', {})).rejects.toThrow('Select one testnet account');
+    expect(mocks.sign).not.toHaveBeenCalled();
+  });
+
+  it('still rejects ambiguous sign-in events even with a previously selected account', async () => {
+    const chain = await import('./chain');
+    const listener = vi.fn();
+    chain.subscribeWallet(listener);
+    await chain.startWallet();
+    const signIn = mocks.on.mock.calls.find(([event]) => event === 'wallet:signIn')![1];
+    signIn({ ...wallet(), accounts: [{ accountId: 'alice.testnet' }, { accountId: 'bob.testnet' }], success: true });
+    expect(listener).toHaveBeenLastCalledWith(null);
+  });
+
   it('refuses changing wallets while a transaction is awaiting finality', async () => {
     const chain = await import('./chain');
     let finish!: (value: ReturnType<typeof outcome>) => void;
